@@ -1,0 +1,16 @@
+E:\MicroDB-Engine\src\main\java\Page\PageReference.java
+E:\MicroDB-Engine\src\main\java\exceptions\DBQueryException.java
+E:\MicroDB-Engine\src\main\java\Page\Page.java
+E:\MicroDB-Engine\src\main\java\exceptions\DBSchemaException.java
+E:\MicroDB-Engine\src\main\java\model\Tuple.java
+E:\MicroDB-Engine\src\main\java\exceptions\DBAppException.java
+E:\MicroDB-Engine\src\main\java\exceptions\DBAlreadyExistsException.java
+E:\MicroDB-Engine\src\main\java\exceptions\DBNotFoundException.java
+E:\MicroDB-Engine\src\main\java\Utils\MetaDataManager.java
+E:\MicroDB-Engine\src\main\java\Utils\SerializationManager.java
+E:\MicroDB-Engine\src\main\java\DBApp.java
+E:\MicroDB-Engine\src\main\java\Utils\Utils.java
+E:\MicroDB-Engine\src\main\java\Utils\Validation.java
+E:\MicroDB-Engine\src\main\java\exceptions\DBDuplicateException.java
+E:\MicroDB-Engine\src\main\java\model\Table.java
+E:\MicroDB-Engine\src\main\java\model\SQLTerm.java
