@@ -1,0 +1,4 @@
+"Table Name","Column Name","Column Type","ClusteringKey","IndexName","IndexType","min","max"
+"Student","id","java.lang.Integer","True","null","null","java.lang.Integer","java.lang.Integer"
+"Student","gpa","java.lang.double","False","gpaIndex","Octree","java.lang.double","java.lang.double"
+"Student","name","java.lang.String","False","NameAddrSpecIndex","Octree","java.lang.String","java.lang.String"
