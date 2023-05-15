@@ -1,0 +1,17 @@
+utils\Utils.class
+exceptions\DBNotFoundException.class
+model\SQLTerm.class
+model\Page\AbstractPage.class
+model\Tuple.class
+exceptions\DBAppException.class
+exceptions\DBQueryException.class
+exceptions\DBSchemaException.class
+model\Table.class
+exceptions\DBAlreadyExistsException.class
+model\Page\Page.class
+utils\SerializationManager.class
+DBApp.class
+utils\MetaDataManager.class
+model\Page\PageReference.class
+utils\Validation.class
+exceptions\DBDuplicateException.class
