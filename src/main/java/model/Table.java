@@ -34,6 +34,7 @@ public class Table implements Serializable {
     }
 
     public void insertTuple(Tuple tuple) throws DBAppException {
+        valadation.validateColumnTypes(tuple);
         if (this.getPagesCount() == 0 || this.isFull()) // If no pages exist OR table is full
             addPage(new Page(this.tableName, getPagesCount()));
 
@@ -70,14 +71,17 @@ public class Table implements Serializable {
     }
 
     public void updateTuple(Object clusterKeyValue, Hashtable<String, Object> htblColNameValue) throws DBAppException {
+        
+    Tuple tuple = findTuple(clusterKeyValue);
+
+
+    valadation.validateColumnTypes(tuple, htblColNameValue);
         int pageIndex = Utils.binarySearch(this.pagesReference, clusterKeyValue);
         if (pageIndex < 0)
             throw new DBNotFoundException("Tuple does not exist");
 
         PageReference pageRef = getPageReference(pageIndex);
         Page page = SerializationManager.deserializePage(getTableName(), pageRef);
-
-        Tuple tuple = page.findTuple(clusterKeyValue);
         for (String key : htblColNameValue.keySet()) {
             if (key.equals(this.clusterKeyName))
                 throw new DBQueryException("Cannot update cluster key value");
@@ -88,32 +92,161 @@ public class Table implements Serializable {
 
         SerializationManager.serializePage(page);
     }
+    public Index getCombinedIndex(LinkedHashMap<String, Object> htblColNameValue) {
+        // Get the relevant indices for the columns in the query
+        Set<Index> relevantIndices = getRelevantIndices(htblColNameValue.keySet());
 
+        // Combine the relevant indices into a single index
+        Index combinedIndex = IndexManager.combineIndices(relevantIndices);
 
-    public Iterator selectTuples(Map<String, Object> htblColNameValue, String[] compareOperators, String[] strarrOperators) throws DBAppException {
-        List<Tuple> tuples = new Vector<>();
-        Page page;
-        for (PageReference pageRef : pagesReference) {
-            page = SerializationManager.deserializePage(getTableName(), pageRef);
-            for (int j = 0; j < page.getSize(); j++) {
-                Tuple tuple = page.getTuple(j);
+        return combinedIndex;
+    }
 
-                Boolean[] matches = new Boolean[htblColNameValue.size()];
-                Arrays.fill(matches, true);
+    private Set<Index> getRelevantIndices(Set<String> columnNames) {
+        Set<Index> relevantIndices = new HashSet<>();
 
-                Object[] keySet = htblColNameValue.keySet().toArray();
-                for (int k = 0; k < keySet.length; k++) {
-                    String key = (String) keySet[k];
-                    if (!isConditionTrue(tuple.getColValue(key), htblColNameValue.get(key), compareOperators[k]))
-                        matches[k] = false;
-                }
-
-                if (isTupleSatisfy(matches, strarrOperators))
-                    tuples.add(tuple);
+        for (Index index : indices) {
+            String[] indexColNames = index.getColNames();
+            Set<String> indexColumns = new HashSet<>(Arrays.asList(indexColNames));
+            if (indexColumns.containsAll(columnNames)) {
+                relevantIndices.add(index);
             }
         }
-        return tuples.iterator();
+
+        return relevantIndices;
     }
+    public boolean hasIndexForColumns(String[] columnNames) {
+        for (Index index : indexes) {
+            String[] indexColNames = index.getColNames();
+            if (Arrays.equals(columnNames, indexColNames)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+        public Iterator selectTuples(LinkedHashMap<String, Object> htblColNameValue, String[] compareOperators, String[] strarrOperators) throws DBAppException {
+            valadation.validateColumnTypes(htblColNameValue);
+            List<Tuple> tuples = new ArrayList<>();
+        
+            Page page;
+            for (PageReference pageRef : pagesReference) {
+                page = SerializationManager.deserializePage(getTableName(), pageRef);
+                for (int j = 0; j < page.getSize(); j++) {
+                    Tuple tuple = page.getTuple(j);
+        
+                    Boolean[] matches = new Boolean[htblColNameValue.size()];
+                    Arrays.fill(matches, true);
+        
+                    Object[] keySet = htblColNameValue.keySet().toArray();
+                    for (int k = 0; k < keySet.length; k++) {
+                        String key = (String) keySet[k];
+                        if (!isConditionTrue(tuple.getColValue(key), htblColNameValue.get(key), compareOperators[k]))
+                            matches[k] = false;
+                    }
+        
+                    if (isTupleSatisfy(matches, strarrOperators))
+                        tuples.add(tuple);
+                }
+            }
+        
+            return tuples.iterator();
+        }
+        public boolean validateTuple(Tuple tuple, LinkedHashMap<String, Object> htblColNameValue, String[] compareOperators, String[] strarrOperators) {
+            Boolean[] matches = new Boolean[htblColNameValue.size()];
+            Arrays.fill(matches, true);
+        
+            Object[] keySet = htblColNameValue.keySet().toArray();
+            for (int k = 0; k < keySet.length; k++) {
+                String key = (String) keySet[k];
+                if (!isConditionTrue(tuple.getColValue(key), htblColNameValue.get(key), compareOperators[k]))
+                    matches[k] = false;
+            }
+        
+            return isTupleSatisfy(matches, strarrOperators);
+        }
+        
+        private boolean isConditionTrue(Object tupleValue, Object queryValue, String operator) {
+            if (operator.equals("="))
+                return Objects.equals(tupleValue, queryValue);
+            else if (operator.equals(">"))
+                return compareValues(tupleValue, queryValue) > 0;
+            else if (operator.equals("<"))
+                return compareValues(tupleValue, queryValue) < 0;
+            else if (operator.equals(">="))
+                return compareValues(tupleValue, queryValue) >= 0;
+            else if (operator.equals("<="))
+                return compareValues(tupleValue, queryValue) <= 0;
+            else if (operator.equals("!="))
+                return !Objects.equals(tupleValue, queryValue);
+            else
+                throw new IllegalArgumentException("Invalid operator: " + operator);
+        }
+        
+        private int compareValues(Object value1, Object value2) {
+            if (value1 instanceof Comparable && value2 instanceof Comparable) {
+                return ((Comparable) value1).compareTo(value2);
+            } else {
+                throw new IllegalArgumentException("Values are not comparable");
+            }
+        }
+        
+        private boolean isTupleSatisfy(Boolean[] conditionsBool, String[] betweenConditions) {
+            if (betweenConditions.length == 0)
+                return conditionsBool[0];
+        
+            boolean result = conditionsBool[0];
+            for (int i = 1; i < conditionsBool.length; i++) {
+                String operator = betweenConditions[i - 1].toLowerCase();
+        
+                if (operator.equals("and"))
+                    result = result && conditionsBool[i];
+                else if (operator.equals("or"))
+                    result = result || conditionsBool[i];
+                else if (operator.equals("xor"))
+                    result = result ^ conditionsBool[i];
+                else
+                    throw new IllegalArgumentException("Invalid logical operator: " + operator);
+            }
+        
+            return result;
+        }
+            
+        public Iterator selectTuplesWithIndex(LinkedHashMap<String, Object> htblColNameValue, String[] compareOperators, String[] strarrOperators) throws DBAppException {
+            // Get the relevant indices for the queried columns
+            Set<String> queryColumns = htblColNameValue.keySet();
+            Set<Index> relevantIndices = getRelevantIndices(queryColumns);
+        
+            // Check if a combined index is available for the query columns
+            Index combinedIndex = null;
+            if (relevantIndices.size() > 0) {
+                combinedIndex = IndexManager.combineIndices(relevantIndices);
+                if (combinedIndex != null) {
+                    // Use the combined index to retrieve matching tuples
+                    Set<Tuple> selectedTuples = combinedIndex.getMatchingTuples(htblColNameValue);
+                    return selectedTuples.iterator();
+                }
+            }
+        
+            // No combined index available, fall back to linear scanning on the table
+            List<Tuple> selectedTuples = new ArrayList<>();
+        
+            Page page;
+            for (PageReference pageRef : pagesReference) {
+                page = SerializationManager.deserializePage(getTableName(), pageRef);
+                for (int j = 0; j < page.getSize(); j++) {
+                    Tuple tuple = page.getTuple(j);
+        
+                    // Check if the tuple satisfies the query conditions
+                    if (validateTuple(tuple, htblColNameValue, compareOperators, strarrOperators)) {
+                        selectedTuples.add(tuple);
+                    }
+                }
+            }
+        
+            return selectedTuples.iterator();
+        }
+        
     
     public void createIndex(String[] ColNames, Hashtable<String, Object> min, Hashtable<String, Object> max) throws DBAppException {
         this.indices.add(new Index(ColNames, min, max));
@@ -209,44 +342,6 @@ public class Table implements Serializable {
         SerializationManager.serializePage(toPage);
     }
 
-    private boolean isConditionTrue(Object t, Object o, String operator) {
-        Comparable t1 = (Comparable) t;
-
-        switch (operator) {
-            case ">":
-                return t1.compareTo(o) > 0;
-            case ">=":
-                return t1.compareTo(o) >= 0;
-            case "<":
-                return t1.compareTo(o) < 0;
-            case "<=":
-                return t1.compareTo(o) <= 0;
-            case "=":
-                return t1.compareTo(o) == 0;
-            case "!=":
-                return t1.compareTo(o) != 0;
-            default:
-                return false;
-        }
-    }
-
-    private boolean isTupleSatisfy(Boolean[] conditionsBool, String[] betweenConditions) {
-        Boolean result = conditionsBool[0];
-        for (int i = 1; i < betweenConditions.length; i++) {
-            String operator = betweenConditions[i-1];
-
-            if (operator.equals("AND".toLowerCase()))
-                result = result && conditionsBool[i];
-            else if (operator.equals("OR".toLowerCase()))
-                result = result || conditionsBool[i];
-            else if (operator.equals("XOR".toLowerCase()))
-                result = result ^ conditionsBool[i];
-            else
-                return false;
-        }
-
-        return result;
-    }
 
 
     private void addPage(Page page) throws DBAppException {

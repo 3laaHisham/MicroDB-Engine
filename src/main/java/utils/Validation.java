@@ -233,6 +233,63 @@ public class Validation {
         }
         return true;
     }
+    public static void validateColumnType(Object value, String expectedType) throws DBAppException {
+        if (value != null && !value.getClass().getSimpleName().equals(expectedType)) {
+            throw new DBQueryException("Invalid type: Expected " + expectedType + ", found " + value.getClass().getSimpleName());
+        }
+    }
 
+    public static void validateTupleMetadata(Tuple tuple, String tableName) throws DBAppException {
+        Hashtable<String, Hashtable<String, String>> metadata = MetaDataManager.getMetaData(tableName);
 
+        for (String colName : tuple.getColNames()) {
+            if (!metadata.containsKey(colName)) {
+                throw new DBQueryException("Column '" + colName + "' does not exist in table metadata");
+            }
+
+            Hashtable<String, String> colMetadata = metadata.get(colName);
+            String expectedType = colMetadata.get("ColumnType");
+            Object value = tuple.getColValue(colName);
+
+            validateColumnType(value, expectedType);
+        }
+    }
+    public class ColumnTypeValidator {
+        public static void validateColumnTypes(Tuple tuple, String tableName) throws DBAppException {
+            Hashtable<String, String> columnTypes = MetaDataManager.getMetaData(tableName);
+            for (String colName : tuple.getColNames()) {
+                Object value = tuple.getColValue(colName);
+                String expectedType = columnTypes.get(colName);
+    
+                if (value != null && !value.getClass().getSimpleName().equals(expectedType)) {
+                    throw new DBQueryException("Invalid type for column '" + colName + "'");
+                }
+            }
+        }
+    
+        public static void validateColumnTypes(Tuple tuple, Hashtable<String, Object> htblColNameValue, String tableName) throws DBAppException {
+            Hashtable<String, String> columnTypes = MetaDataManager.getMetaData(tableName);
+            for (String colName : htblColNameValue.keySet()) {
+                Object value = htblColNameValue.get(colName);
+                String expectedType = columnTypes.get(colName);
+    
+                if (value != null && !value.getClass().getSimpleName().equals(expectedType)) {
+                    throw new DBQueryException("Invalid type for column '" + colName + "'");
+                }
+            }
+        }
+    
+        public static void validateColumnTypes(Hashtable<String, Object> htblColNameValue, String tableName) throws DBAppException {
+            Hashtable<String, String> columnTypes = MetaDataManager.getMetaData(tableName);
+            for (String colName : htblColNameValue.keySet()) {
+                Object value = htblColNameValue.get(colName);
+                String expectedType = columnTypes.get(colName);
+    
+                if (value != null && !value.getClass().getSimpleName().equals(expectedType)) {
+                    throw new DBQueryException("Invalid type for column '" + colName + "'");
+                }
+            }
+        }
+    }
+   
 }

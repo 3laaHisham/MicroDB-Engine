@@ -25,9 +25,17 @@ public class Tuple implements Comparable, Serializable {
         return htblColNameValue.get(colName);
     }
 
-    public void setColValue(String colName, Object value) {
+    public void setColValue(String colName, Object value, Hashtable<String, String> columnTypes) {
+        if (columnTypes.containsKey(colName)) {
+            String expectedType = columnTypes.get(colName);
+            if (value != null && !value.getClass().getSimpleName().equals(expectedType)) {
+                throw new IllegalArgumentException("Invalid type for column: " + colName);
+            }
+        }
+        
         htblColNameValue.put(colName, value);
     }
+    
 
     public Object getClusterKeyValue() {
         return htblColNameValue.get(clusterKeyName);
@@ -61,6 +69,17 @@ public class Tuple implements Comparable, Serializable {
             otherValue = o;
 
         return thisValue.compareTo(otherValue);
+    }
+
+    public void validateColumnTypes(Hashtable<String, String> columnTypes) {
+        for (String colName : htblColNameValue.keySet()) {
+            Object colValue = htblColNameValue.get(colName);
+            String expectedType = columnTypes.get(colName);
+
+            if (colValue != null && !colValue.getClass().getSimpleName().equals(expectedType)) {
+                throw new IllegalArgumentException("Invalid type for column: " + colName);
+            }
+        }
     }
 
 }

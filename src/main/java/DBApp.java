@@ -188,43 +188,114 @@ public class DBApp {
     // htblColNameValue holds the key and value. This will be used in search
     // to identify which rows/tuples to delete.
     // htblColNameValue entries are ANDED together
-    public void deleteFromTable(String strTableName, Hashtable<String, Object> htblColNameValue)
-            throws DBAppException, ParseException, IOException {
-
-        if (!Validation.isTableExists(strTableName))
-            throw new DBNotFoundException("Table do not exist");
-
-        Hashtable<String, Hashtable<String, String>> htblColNameMetaData = MetaDataManager.getMetaData(strTableName);
-        if (!htblColNameValue.keySet().equals(htblColNameMetaData.keySet()))
-            throw new DBSchemaException("Column names do not match table schema");
-        if (!Validation.validateSchema(htblColNameValue, htblColNameMetaData))
-            throw new DBSchemaException("Columns metadata do not match table schema");
-
-        Table table = SerializationManager.deserializeTable(strTableName);
-
-        table.deleteTuples(htblColNameValue);
-
-        SerializationManager.serializeTable(table);
-    }
-
     public Iterator selectFromTable(SQLTerm[] arrSQLTerms, String[] strarrOperators) throws DBAppException {
-        // 3 Indexed Columns and in order
+        // Get the table name from the first SQLTerm
         String strTableName = arrSQLTerms[0]._strTableName;
-
+    
+        // Deserialize the table
         Table table = SerializationManager.deserializeTable(strTableName);
-
+        // Prepare the parameters for selectTuples method
         LinkedHashMap<String, Object> htblColNameValue = new LinkedHashMap<>();
         String[] compareOperators = new String[arrSQLTerms.length];
+
+        boolean isAnded = areSQLTermsAnded(strarrOperators);
+        boolean hasOrXor = hasOrXorOperator(strarrOperators);
+        boolean indexExists = isIndexExistsForColumns(strTableName, getColumnNames(arrSQLTerms));
+    
+        // Populate htblColNameValue and compareOperators arrays
         for (int i = 0; i < arrSQLTerms.length; i++) {
             SQLTerm term = arrSQLTerms[i];
-
+    
             htblColNameValue.put(term._strColumnName, term._objValue);
             compareOperators[i] = term._strOperator;
         }
-
-        return table.selectTuples(htblColNameValue, compareOperators, strarrOperators);
+    
+        if (indexExists && isAnded && !hasOrXor) {
+            // Use the index for selection
+            return table.selectTuplesWithIndex(htblColNameValue, compareOperators, strarrOperators);
+        } else {
+            if (isAnded && (hasOrXor || containsXorOperator(compareOperators) || containsOrOperator(compareOperators))) {
+                // Perform a linear scan of the table for AND terms
+                Iterator andResult = table.selectTuples(htblColNameValue, compareOperators, strarrOperators, "AND");
+    
+                // Perform a linear scan of the table for OR terms
+                if (containsOrOperator(compareOperators)) {
+                    Iterator orResult = table.selectTuples(htblColNameValue, compareOperators, strarrOperators, "OR");
+                    andResult = combineIterators(andResult, orResult);
+                }
+    
+                // Perform a linear scan of the table for XOR terms
+                if (containsXorOperator(compareOperators)) {
+                    Iterator xorResult = table.selectTuples(htblColNameValue, compareOperators, strarrOperators, "XOR");
+                    andResult = combineIterators(andResult, xorResult);
+                }
+    
+                return andResult;
+            } else {
+                // Perform a linear scan of the table
+                return table.selectTuples(htblColNameValue, compareOperators, strarrOperators);
+            }
+        }
     }
+ 
+        
+    
+    private boolean areSQLTermsAnded(String[] strarrOperators) {
+        for (String operator : strarrOperators) {
+            if (!operator.equalsIgnoreCase("AND")) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
 
+    private boolean hasOrXor(String[] strarrOperators) {
+        for (String operator : strarrOperators) {
+            if (operator.equalsIgnoreCase("OR") || operator.equalsIgnoreCase("XOR")) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    private boolean containsOrOperator(String[] compareOperators) {
+        for (String operator : compareOperators) {
+            if (operator.equalsIgnoreCase("OR")) {
+                return true;
+            }
+        }
+        return false;
+    }
+    private boolean containsXOrOperator(String[] compareOperators) {
+        for (String operator : compareOperators) {
+            if (operator.equalsIgnoreCase("XOR")) {
+                return true;
+            }
+        }
+        return false;
+    }   
+    public boolean isIndexExistsForColumns(String strTableName, String[] columnNames) {
+        try {
+            Hashtable<String, Hashtable<String, String>> tableMetaData = MetaDataManager.getMetaData(strTableName);
+            TreeMap<String, Hashtable<String, String>> sortedMetaData = new TreeMap<>(tableMetaData);
+    
+            for (String columnName : columnNames) {
+                if (sortedMetaData.containsKey(columnName)) {
+                    Hashtable<String, String> columnMetaData = sortedMetaData.get(columnName);
+                    if (columnMetaData.containsKey("IndexName")) {
+                        return true;
+                    }
+                }
+            }
+        } catch (DBAppException e) {
+            // Handle the exception
+        }
+    
+        return false;
+    }
+    
+    
     public static void printTable(String tableName) throws DBAppException {
         Table table = SerializationManager.deserializeTable(tableName);
 
